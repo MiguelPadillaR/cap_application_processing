@@ -20,7 +20,7 @@ from sigpac_tools.find import find_from_cadastral_registry
 logger = structlog.getLogger(__name__)
 
 CHUNK_SIZE = 10_000
-MAX_ROWS_TEST = None  # Change to 10 or 100 for testing, None for full file
+MAX_ROWS_TEST = 1000  # Change to 10 or 100 for testing, None for full file
 MAX_WORKERS = 32  # Concurrent network threads for API calls
 
 
@@ -50,11 +50,11 @@ def process_cap_data2(
     
     unprocessed_entries = []
     cadastral_entries = []
-    cad_refs = []
 
     for chunk in iter_merged_data(
         merged_output_file, batch_size=CHUNK_SIZE, max_rows=MAX_ROWS_TEST
     ):
+        cad_refs = []
         processed_entries = []
 
         # Step A: Filter non-ecoscheme entries and prepare cadastral keys
@@ -127,41 +127,20 @@ def process_cap_data2(
             ecoscheme_code = ecoscheme.split(" - ", maxsplit=1)[0]
             
             rates = classification_entry.get("Rates", {})
-            
-            surface_threshold = rates.get("Threshold_ha", 0.0)
-            threshold_applies = surface > surface_threshold 
-            filtered_surface = (surface - surface_threshold)
 
-            peninsular_rate_tier_1 = rates.get("Peninsular", 0.0).get("Tier_1", 0.0)
-            insular_rate_tier_1 = rates.get("Insular", 0.0).get("Tier_1", 0.0)
-            peninsular_rate_tier_2 = rates.get("Peninsular", 0.0).get("Tier_2", 0.0)
-            insular_rate_tier_2 = rates.get("Insular", 0.0).get("Tier_2", 0.0)
-
-            peninsular_base_amount = peninsular_rate_tier_1 * surface if not threshold_applies else peninsular_rate_tier_2 * surface_threshold + peninsular_rate_tier_1 * filtered_surface
-            insular_base_amount = insular_rate_tier_1 * surface if not threshold_applies else insular_rate_tier_2 * surface_threshold + insular_rate_tier_1 * filtered_surface
-            peninsular_pluri_amount = (peninsular_rate_tier_1 + 25) * surface if not threshold_applies else (peninsular_rate_tier_2 + 25) * surface_threshold + (peninsular_rate_tier_1 + 25) * filtered_surface
-            insular_pluri_amount = (insular_rate_tier_1 + 25) * surface if not threshold_applies else (insular_rate_tier_2 + 25) * surface_threshold + (insular_rate_tier_1 + 25) * filtered_surface
-
-            pluriannuality_applicable = (rates.get("Pluriannuality") == "Applicable")
-
-            # # Step B: Batch fetch crop data with deduplication & concurrency
-            # unique_cad_refs = list({cad_refs})
-
-            # crop_cache = process_api_queries(use_parallel, unique_cad_refs)
+            payments = calculate_ecoscheme_payments(surface, rates)
 
             # Build updated entry
             updated_entry = dict(entry)
             updated_entry["%_PENDIENTE_MEDIA"] = "0.0%"
-
             updated_entry["ECORREGIMEN_CODIGO"] = ecoscheme_code
-            updated_entry["PENINSULAR_PAGO_BASE"] = peninsular_base_amount
-            updated_entry["PENINSULAR_PAGO_PLURI"] = peninsular_base_amount if not pluriannuality_applicable else peninsular_pluri_amount
-            updated_entry["INSULAR_PAGO_BASE"] = insular_base_amount
-            updated_entry["INSULAR_PAGO_PLURI"] = insular_base_amount if not pluriannuality_applicable else insular_pluri_amount
-            
+            updated_entry.update(payments)
+
             processed_entries.append(updated_entry)
 
-        # 3. Append chunk results incrementally to output file
+        # TODO: Process cadastral refs entries
+
+        # 4. Append chunk results incrementally to output file
         save_processed_chunk(
             processed_entries, processed_output_file, is_first_chunk=is_first_chunk
         )
@@ -466,6 +445,60 @@ def select_classification(
 
     return matches[0]
 
+def calculate_tiered_amount(
+    surface: float,
+    threshold: float,
+    regional_rates: dict | int | float,
+    supplement: float = 0.0,
+) -> float:
+    """Calculate a payment using the existing tier semantics."""
+    if isinstance(regional_rates, (int, float)):
+        return (regional_rates + supplement) * surface
+
+    tier_1_rate = regional_rates["Tier_1"]
+    tier_2_rate = regional_rates["Tier_2"]
+
+    if surface <= threshold:
+        return (tier_1_rate + supplement) * surface
+
+    threshold_amount = (tier_2_rate + supplement) * threshold
+    excess_amount = (tier_1_rate + supplement) * (surface - threshold)
+
+    return threshold_amount + excess_amount
+
+
+def calculate_ecoscheme_payments(
+    surface: float,
+    rates: dict,
+) -> dict:
+    threshold = rates.get("Threshold_ha", 0.0)
+    pluriannuality_applicable = rates.get("Pluriannuality") == "Applicable"
+    supplement = 25.0 if pluriannuality_applicable else 0.0
+
+    peninsular_rates = rates.get("Peninsular", {})
+    insular_rates = rates.get("Insular", {})
+
+    peninsular_base = calculate_tiered_amount(
+        surface, threshold, peninsular_rates
+    )
+    insular_base = calculate_tiered_amount(
+        surface, threshold, insular_rates
+    )
+
+    peninsular_pluri = calculate_tiered_amount(
+        surface, threshold, peninsular_rates, supplement
+    )
+    insular_pluri = calculate_tiered_amount(
+        surface, threshold, insular_rates, supplement
+    )
+
+    return {
+        "PENINSULAR_PAGO_BASE": peninsular_base,
+        "PENINSULAR_PAGO_PLURI": peninsular_pluri,
+        "INSULAR_PAGO_BASE": insular_base,
+        "INSULAR_PAGO_PLURI": insular_pluri,
+    }
+
 if __name__ == "__main__":
     years = [2023, 2024]
     OUT_DIR.mkdir(exist_ok=True)
@@ -481,3 +514,4 @@ if __name__ == "__main__":
             merged_output_file=merged_output_file,
             classification_file=classification_file,
         )
+

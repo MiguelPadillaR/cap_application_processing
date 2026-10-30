@@ -25,9 +25,10 @@ def process_year(year: int, use_parallel: bool = True) -> None:
         str(processed_output_path) if not processed_output_path.exists() else None
     )
 
-    if merged_output_file is not None and processed_output_file is not None:
+    if merged_output_file is not None:
         classification_file = str(DATA_DIR / f"classification_{year}.json")
         merged_output_file = get_merge_cap_data(year, output_file=merged_output_file)
+    if processed_output_file is not None:
         out = process_cap_data(
             processed_output_file=processed_output_file,
             merged_output_file=merged_output_file,
