@@ -9,7 +9,6 @@ from cap_application_processing.process_cap_data import process_cap_data
 from cap_application_processing.utils import get_merge_cap_data
 
 
-
 def process_year(year: int, use_parallel: bool = True) -> None:
     """Processes datasets for a single year."""
     merged_filename = f"PAC_{year}_MERGED.csv"
@@ -33,7 +32,7 @@ def process_year(year: int, use_parallel: bool = True) -> None:
             processed_output_file=processed_output_file,
             merged_output_file=merged_output_file,
             classification_file=classification_file,
-            use_parallel=use_parallel
+            use_parallel=use_parallel,
         )
         if out is not None and len(out) > 0:
             with open(DATA_DIR / f"{year}_unprocessed_entries.txt", "w") as f:

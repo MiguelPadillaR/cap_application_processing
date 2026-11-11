@@ -9,7 +9,6 @@ from sigpac_tools.generate import build_cadastral_reference
 from cap_application_processing.constants import DATA_DIR
 
 
-
 logger = structlog.get_logger()
 
 
@@ -310,6 +309,7 @@ def get_crop_sigpac_id(crop_merged_id: int | str) -> str:
 
     return mapping.get(crop_str, "TA")
 
+
 def check_cadastral_data(
     cadastral_reference: str,
     province: str,
@@ -333,7 +333,9 @@ def check_cadastral_data(
     """
     if not cadastral_reference:
         if not province:
-            logger.error(f"No cadastral reference nor parcel address location data provided.")
+            logger.error(
+                "No cadastral reference nor parcel address location data provided."
+            )
             return None
         else:
             # Build cadastral reference
@@ -343,7 +345,6 @@ def check_cadastral_data(
                 province, municipality, polygon, parcel_id
             )
     return cadastral_reference
-
 
 
 def iter_merged_data(
@@ -365,7 +366,7 @@ def iter_merged_data(
         {limit_clause}
     """
 
-    arrow_reader = con.execute(query).fetch_record_batch(batch_size)
+    arrow_reader = con.execute(query).to_arrow_reader(batch_size)
     try:
         for batch in arrow_reader:
             yield batch.to_pylist()
