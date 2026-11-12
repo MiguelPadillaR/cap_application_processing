@@ -366,7 +366,7 @@ def iter_merged_data(
         {limit_clause}
     """
 
-    arrow_reader = con.execute(query).to_arrow_reader(batch_size)
+    arrow_reader = con.sql(query).to_arrow_reader(batch_size)
     try:
         for batch in arrow_reader:
             yield batch.to_pylist()
