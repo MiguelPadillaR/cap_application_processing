@@ -93,7 +93,24 @@
         "Pluriannuality": "N/A",
         "Threshold_ha": "N/A",
         "Peninsular": 48.56,
-        "Insular": "N/A"
+        "Insular": 0.0
+      }
+    },
+    {
+      "Ecoscheme": "P5 (B) - Espacios de Biodiversidad (Bajo Agua)",
+      "Land_Uses": [506, 507],
+      "Conditions": "Aplicable a superficies de cultivo bajo agua (ej. arrozales).",
+      "Rates": {
+        "Pluriannuality": "N/A",
+        "Threshold_ha": "N/A",
+        "Peninsular": {
+          "Tier_1": 155.19,
+          "Tier_2": 155.19
+        },
+        "Insular": {
+          "Tier_1": 155.19,
+          "Tier_2": 155.19
+        }
       }
     },
     {
