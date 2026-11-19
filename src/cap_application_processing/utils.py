@@ -1,3 +1,5 @@
+import csv
+
 import duckdb
 import structlog
 
@@ -21,18 +23,20 @@ def get_merge_cap_data(year, output_file=None):
 
     con = duckdb.connect()
 
+    # Sources are UTF-8; output is UTF-8 with FORCE_QUOTE * so the result is
+    # unambiguous (row counting, sorting and re-reading all rely on it).
     query = f"""
     COPY (
         SELECT
             a.*,
             s.* EXCLUDE (SECUENCIAL, REC_CODIGO)
-        FROM read_csv_auto('{ayudas_file}', header=True) AS a
-        LEFT JOIN read_csv_auto('{superficies_file}', header=True) AS s
+        FROM read_csv_auto('{ayudas_file}', header=True, encoding='UTF-8') AS a
+        LEFT JOIN read_csv_auto('{superficies_file}', header=True, encoding='UTF-8') AS s
             ON a.SECUENCIAL = s.SECUENCIAL
             AND a.REC_CODIGO = s.REC_CODIGO
     )
     TO '{output_file}'
-    (HEADER, DELIMITER ',');
+    (HEADER, DELIMITER ',', FORCE_QUOTE *);
     """
 
     con.execute(query)
@@ -361,8 +365,8 @@ def iter_merged_data(
     limit_clause = f"LIMIT {max_rows}" if max_rows is not None else ""
 
     query = f"""
-        SELECT * 
-        FROM read_csv_auto('{merged_file}', header=True)
+        SELECT *
+        FROM read_csv_auto('{merged_file}', header=True, encoding='UTF-8')
         {limit_clause}
     """
 
@@ -374,6 +378,61 @@ def iter_merged_data(
         con.close()
 
 
+def count_data_rows(path: str) -> int:
+    """Count data rows (excluding header) in a CSV, quote/newline-aware.
+
+    Safe for QUOTE ALL files where a single logical row can span multiple
+    physical lines (embedded commas/newlines in text fields).
+    """
+    import os
+
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return 0
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.reader(f)
+        next(reader, None)  # header
+        return sum(1 for _ in reader)
+
+
+def sort_processed_file(in_path: str, out_path: str) -> None:
+    """Sort the processed CSV by (SECUENCIAL, REC_CODIGO) via DuckDB.
+
+    Writes to a temp file first and atomically replaces `out_path`, so a
+    crash never leaves a half-written final file.
+    """
+    import os
+    import tempfile
+
+    con = duckdb.connect()
+    fd, tmp_path = tempfile.mkstemp(
+        suffix=".csv", dir=os.path.dirname(os.path.abspath(out_path))
+    )
+    os.close(fd)
+    try:
+        con.execute(
+            f"""
+            COPY (
+                SELECT *
+                FROM read_csv_auto(
+                    '{in_path}',
+                    header=True,
+                    encoding='UTF-8',
+                    quote='"',
+                    sample_size=-1
+                )
+                ORDER BY SECUENCIAL, REC_CODIGO
+            )
+            TO '{tmp_path}'
+            (HEADER, DELIMITER ',', FORCE_QUOTE *);
+            """
+        )
+        os.replace(tmp_path, out_path)
+    finally:
+        con.close()
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
 def save_processed_chunk(
     processed_entries: List[Dict[str, Any]],
     output_file: str,
@@ -381,6 +440,9 @@ def save_processed_chunk(
 ):
     """
     Appends a list of processed dictionaries to the output CSV file.
+
+    UTF-8 + QUOTE ALL keeps the file unambiguous so count_data_rows() can be
+    trusted for resume.
     """
     if not processed_entries:
         return
@@ -388,7 +450,14 @@ def save_processed_chunk(
     df = pd.DataFrame(processed_entries)
     mode = "w" if is_first_chunk else "a"
     header = is_first_chunk
-    df.to_csv(output_file, mode=mode, header=header, index=False)
+    df.to_csv(
+        output_file,
+        mode=mode,
+        header=header,
+        index=False,
+        encoding="utf-8",
+        quoting=csv.QUOTE_ALL,
+    )
 
 
 def save_processed_results(processed_records: list[dict], output_file: str):

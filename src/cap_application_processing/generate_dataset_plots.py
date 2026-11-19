@@ -238,7 +238,7 @@ if __name__ == "__main__":
             logger.error("Dataset file does not exist", file_path=file_path)
         else:
             logger.info("Loading dataset...", file_path=file_path)
-            df = pd.read_csv(file_path, encoding="latin1", low_memory=False)
+            df = pd.read_csv(file_path, encoding="utf-8", low_memory=False)
 
             generate_dataset_plots(df)
 
