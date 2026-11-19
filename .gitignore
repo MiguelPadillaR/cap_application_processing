@@ -5,6 +5,30 @@ build/
 dist/
 wheels/
 *.egg-info
+.ruff_cache/
 
 # Virtual environments
 .venv
+
+# Large input data (source CSVs, ~1.2 GB total)
+data/PAC_*_AYUDAS.csv
+data/PAC_*_SUPERFICIES.csv
+
+# Pipeline working files (caches, worklists, ~250 MB total)
+data/sigpac_cache*.jsonl
+data/sigpac_cache*.jsonl.migrated
+data/pending_keys_*.txt
+
+# Pipeline outputs (merged/processed/sorted CSVs, ~5 GB total)
+out/
+
+# Generated plots
+plots/
+
+# Logs (rotated pipeline logs can reach hundreds of MB)
+*.log
+*.log.*
+
+# Scratch / debug files
+data/lol.csv
+data/quick_analysis.*
