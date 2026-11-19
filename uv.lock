@@ -840,7 +840,7 @@ wheels = [
 [[package]]
 name = "sigpac-tools"
 version = "1.1.0"
-source = { git = "https://github.com/KhaosResearch/sigpac-tools.git?rev=dev#e8d10238fc671b54909d7494f64b549994e215d1" }
+source = { git = "https://github.com/KhaosResearch/sigpac-tools.git?rev=dev#6129f7a3cb12f3d7b55e7b30a6290f5bb8ce4c0c" }
 dependencies = [
     { name = "pyproj" },
     { name = "requests" },

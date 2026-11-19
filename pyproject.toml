@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-cap-application-processing = "cap_application_processing:main"
+cap-process = "cap_application_processing.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.7,<0.13.0"]
